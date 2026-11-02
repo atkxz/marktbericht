@@ -36,13 +36,12 @@
     "USO": "Öl (WTI)",
     "BTC/USD": "Bitcoin"
   },
-  "fred": {
-    "SP500": ["S&P 500 Index", "Punkte"],
-    "VIXCLS": ["VIX (Volatilität)", "Punkte"],
-    "DGS10": ["US-Rendite 10 J.", "%"],
-    "DGS2": ["US-Rendite 2 J.", "%"],
-    "FEDFUNDS": ["Leitzins Fed", "%"],
-    "CPIAUCSL": ["US-Inflation", "% ggü. Vorjahr"],
+  "makro": {
+    "VIX": ["VIX (Volatilität)", "Punkte"],
+    "UST10": ["US-Rendite 10 J.", "%"],
+    "UST2": ["US-Rendite 2 J.", "%"],
+    "EFFR": ["Leitzins Fed (EFFR)", "%"],
+    "CPI": ["US-Inflation", "% ggü. Vorjahr"],
     "UNRATE": ["US-Arbeitslosenquote", "%"]
   },
   "devisen": ["USD", "GBP", "CHF", "JPY"],

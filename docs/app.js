@@ -184,7 +184,7 @@ function viewMaerkte(rep) {
     const diff = m.unit.startsWith("%") ? signed((m.value - m.prev) * 100, 0, " Bp.") : signed((m.value / m.prev - 1) * 100);
     const diffCls = cls(m.value - m.prev);
     return `<li><div class="row nostar" role="button" tabindex="0" data-open="${esc(m.id)}">
-      <span><span class="r-name">${esc(m.name)}</span><br><span class="r-sub">FRED · Stand ${esc(dayLabel(m.date))}</span></span>
+      <span><span class="r-name">${esc(m.name)}</span><br><span class="r-sub">${esc(m.source)} · Stand ${esc(dayLabel(m.date))}</span></span>
       ${s.length > 1 ? spark(s, s.at(-1) >= s[0]) : "<span></span>"}
       <span class="r-right"><span class="num">${num(m.value)}${m.unit.startsWith("%") ? " %" : ""}</span><span class="small num ${diffCls}">${diff}</span></span></div></li>`;
   }).join("");
@@ -242,7 +242,7 @@ function openDetail(key) {
     fmt = (v) => num(v) + (pctUnit ? " %" : "");
     head = `<span class="big num">${fmt(item.value)}</span> <span class="muted small">${esc(item.unit)}</span>`;
     stats = [["Vorwert", fmt(item.prev)], ["Stand", dayLabel(item.date)]];
-    source = `FRED – <a href="${esc(item.url)}" target="_blank" rel="noopener">Originalreihe ${esc(item.id)}</a>`;
+    source = `${esc(item.source)} – <a href="${esc(item.url)}" target="_blank" rel="noopener">Originaldaten</a>`;
   } else {
     title = item.pair;
     fmt = (v) => num(v, fxDigits(item.value));

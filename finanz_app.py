@@ -2,9 +2,14 @@
 
 Quellen (alle offiziell bzw. mit Quellenangabe):
     Alpaca Markets  - Kurse von US-Aktien, ETFs und Bitcoin, Boersenuhr, Nachrichten
-    FRED            - Makrodaten der Federal Reserve Bank of St. Louis
-    EZB             - Euro-Referenzkurse (Ersatz bei Ausfall: FRED)
+    Cboe            - VIX
+    US Treasury     - Renditen von US-Staatsanleihen
+    New York Fed    - Leitzins (Effective Federal Funds Rate)
+    BLS             - Inflation und Arbeitslosenquote der USA
+    EZB             - Euro-Referenzkurse
     Fed, EZB        - Pressemitteilungen der Notenbanken
+
+FRED wird bewusst nicht genutzt: es beantwortet Anfragen von GitHub-Servern nicht.
 
 Aufruf:
     python finanz_app.py                          # docs/data/ aktualisieren
@@ -34,7 +39,11 @@ from market_report import (WEEKDAYS, in_time_window, live_phrase, metrics, num, 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "docs" / "data"
 ALPACA_DATA = "https://data.alpaca.markets"
-FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+CBOE_VIX = "https://cdn-api.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
+TREASURY_CSV = ("https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/"
+                "{year}/all?type=daily_treasury_yield_curve&field_tdr_date_value={year}&page&_format=csv")
+NYFED_EFFR = "https://markets.newyorkfed.org/api/rates/unsecured/effr/last/{n}.json"
+BLS_API = "https://api.bls.gov/publicAPI/v1/timeseries/data/"
 ECB_EXR = "https://data-api.ecb.europa.eu/service/data/EXR/D.{}.EUR.SP00.A"
 NOTENBANK_FEEDS = {
     "Fed": "https://www.federalreserve.gov/feeds/press_all.xml",
@@ -43,10 +52,22 @@ NOTENBANK_FEEDS = {
 UA = {"User-Agent": "Mozilla/5.0 (Marktbericht-App)"}
 SOURCES = [
     {"name": "Alpaca Markets (IEX)", "what": "Kurse, Börsenuhr, Nachrichten", "url": "https://alpaca.markets"},
-    {"name": "FRED, Federal Reserve Bank of St. Louis", "what": "Index, VIX, Zinsen, Inflation, Arbeitsmarkt", "url": "https://fred.stlouisfed.org"},
+    {"name": "Cboe", "what": "VIX", "url": "https://www.cboe.com/tradable_products/vix/"},
+    {"name": "U.S. Department of the Treasury", "what": "Renditen von US-Staatsanleihen", "url": "https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics"},
+    {"name": "Federal Reserve Bank of New York", "what": "Leitzins (EFFR)", "url": "https://www.newyorkfed.org/markets/reference-rates/effr"},
+    {"name": "U.S. Bureau of Labor Statistics", "what": "Inflation, Arbeitslosenquote", "url": "https://www.bls.gov"},
     {"name": "Europäische Zentralbank", "what": "Euro-Referenzkurse, Pressemitteilungen", "url": "https://www.ecb.europa.eu"},
     {"name": "Federal Reserve", "what": "Pressemitteilungen", "url": "https://www.federalreserve.gov"},
 ]
+# Makro-Kennzahl -> (Quelle, Link zur Originalreihe)
+MAKRO_SOURCES = {
+    "VIX": ("Cboe", "https://www.cboe.com/tradable_products/vix/vix_historical_data/"),
+    "UST10": ("US Treasury", "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve"),
+    "UST2": ("US Treasury", "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve"),
+    "EFFR": ("New York Fed", "https://www.newyorkfed.org/markets/reference-rates/effr"),
+    "CPI": ("BLS", "https://data.bls.gov/timeseries/CUUR0000SA0"),
+    "UNRATE": ("BLS", "https://data.bls.gov/timeseries/LNS14000000"),
+}
 
 log = logging.getLogger("app")
 
@@ -59,10 +80,11 @@ def setup_logging():
     log.setLevel(logging.INFO)
 
 
-def fetch(url, headers=None):
-    req = urllib.request.Request(url, headers=headers or UA)
+def fetch(url, headers=None, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, headers={**(headers or UA), **({"Content-Type": "application/json"} if data else {})})
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:
             return resp.read()
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"HTTP {e.code} bei {url.split('?')[0]}") from None
@@ -122,30 +144,71 @@ def alpaca_news(headers, symbols, count):
             for n in d.get("news", [])]
 
 
-# ---------------------------------------------------------------- FRED, EZB, Notenbanken
+# ---------------------------------------------------------------- Makro (Originalquellen), EZB, Notenbanken
 
-def fred_series(sid, start):
-    text = fetch(f"{FRED_CSV}?{urllib.parse.urlencode({'id': sid, 'cosd': start})}").decode()
-    rows = []
-    for r in list(csv.reader(io.StringIO(text)))[1:]:
+def us_date(s):
+    m, d, y = s.split("/")
+    return f"{y}-{m}-{d}"
+
+
+def cboe_vix(start):
+    rows = csv.reader(io.StringIO(fetch(CBOE_VIX).decode()))
+    next(rows)
+    return [(d, float(close)) for d, close in ((us_date(r[0]), r[4]) for r in rows if len(r) >= 5) if d >= start]
+
+
+def treasury_yields(start):
+    """{"2 Yr": [(datum, rendite), ...], "10 Yr": [...]} - Zinskurve des US-Finanzministeriums."""
+    out = {"2 Yr": [], "10 Yr": []}
+    for year in range(int(start[:4]), date.today().year + 1):
+        for r in csv.DictReader(io.StringIO(fetch(TREASURY_CSV.format(year=year)).decode())):
+            for col in out:
+                if r.get(col):
+                    out[col].append((us_date(r["Date"]), float(r[col])))
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def nyfed_effr(n=520):
+    d = json.loads(fetch(NYFED_EFFR.format(n=n)))
+    return sorted((r["effectiveDate"], float(r["percentRate"])) for r in d["refRates"])
+
+
+def bls_series(series, start_year):
+    """Monatswerte {serien_id: [(JJJJ-MM-01, wert), ...]} von der US-Statistikbehoerde."""
+    d = json.loads(fetch(BLS_API, body={"seriesid": series, "startyear": str(start_year), "endyear": str(date.today().year)}))
+    if d.get("status") != "REQUEST_SUCCEEDED":
+        raise RuntimeError(f"BLS: {d.get('message')}")
+    out = {}
+    for s in d["Results"]["series"]:
+        # Monate ohne Erhebung stehen als "-" in den Daten
+        out[s["seriesID"]] = sorted((f"{x['year']}-{x['period'][1:]}-01", float(x["value"]))
+                                    for x in s["data"] if re.fullmatch(r"M(0[1-9]|1[0-2])", x["period"])
+                                    and re.fullmatch(r"-?\d+(\.\d+)?", x["value"]))
+    return out
+
+
+def makro_rows(start):
+    """Rohdaten je Makro-Kennzahl; faellt eine Quelle aus, fehlen nur ihre Werte."""
+    rows = {}
+    for name, load in [("VIX", lambda: {"VIX": cboe_vix(start)}),
+                       ("Treasury", lambda: {"UST10": (y := treasury_yields(start))["10 Yr"], "UST2": y["2 Yr"]}),
+                       ("New York Fed", lambda: {"EFFR": nyfed_effr()}),
+                       ("BLS", lambda: {"CPI": (b := bls_series(["CUUR0000SA0", "LNS14000000"], int(start[:4])))["CUUR0000SA0"],
+                                        "UNRATE": b["LNS14000000"]})]:
         try:
-            rows.append((r[0], float(r[1])))
-        except (ValueError, IndexError):
-            continue  # FRED markiert fehlende Tage mit "." oder leer
+            rows.update(load())
+        except Exception as e:
+            log.warning(f"{name} nicht abrufbar: {e}")
     return rows
 
 
 def ecb_rates(currencies, start):
-    """{"EUR/USD": [(datum, kurs), ...]} - Referenzkurse der EZB, Ersatz fuer EUR/USD: FRED."""
-    try:
-        url = ECB_EXR.format("+".join(currencies)) + "?" + urllib.parse.urlencode({"startPeriod": start, "format": "csvdata"})
-        out = {}
-        for r in csv.DictReader(io.StringIO(fetch(url).decode())):
-            out.setdefault(f"EUR/{r['CURRENCY']}", []).append((r["TIME_PERIOD"], float(r["OBS_VALUE"])))
-        return {k: sorted(v) for k, v in out.items()}, "EZB"
-    except Exception as e:
-        log.warning(f"EZB-Kurse nicht abrufbar ({e}) - nutze FRED fuer EUR/USD.")
-        return {"EUR/USD": fred_series("DEXUSEU", start)}, "FRED"
+    """{"EUR/USD": [(datum, kurs), ...]} - Referenzkurse der EZB."""
+    url = ECB_EXR.format("+".join(currencies)) + "?" + urllib.parse.urlencode({"startPeriod": start, "format": "csvdata"})
+    out = {}
+    for r in csv.DictReader(io.StringIO(fetch(url).decode())):
+        out.setdefault(f"EUR/{r['CURRENCY']}", []).append((r["TIME_PERIOD"], float(r["OBS_VALUE"])))
+    return {k: sorted(v) for k, v in out.items()}
 
 
 def notenbank_news(count):
@@ -185,13 +248,15 @@ def row(sym, name, closes, live, source, with_hist):
 
 
 def macro_entry(sid, name, unit, rows):
-    if sid == "CPIAUCSL":  # Index in Inflationsrate umrechnen (Vorjahresmonat)
-        rows = [(d, pct(v, rows[i - 12][1])) for i, (d, v) in enumerate(rows) if i >= 12]
+    if sid == "CPI":  # Preisindex in Inflationsrate umrechnen (gleicher Monat im Vorjahr)
+        by_month = dict(rows)
+        rows = [(d, pct(v, by_month[f"{int(d[:4]) - 1}{d[4:]}"])) for d, v in rows if f"{int(d[:4]) - 1}{d[4:]}" in by_month]
     if len(rows) < 2:
         return None
     (d_prev, v_prev), (d_last, v_last) = rows[-2], rows[-1]
+    source, url = MAKRO_SOURCES[sid]
     return {"id": sid, "name": name, "unit": unit, "value": v_last, "prev": v_prev, "date": d_last,
-            "source": "FRED", "url": f"https://fred.stlouisfed.org/series/{sid}",
+            "source": source, "url": url,
             "hist": {"from": rows[0][0], "to": d_last, "c": [round(v, 4) for _, v in rows[-260:]]}}
 
 
@@ -235,13 +300,13 @@ def summary(groups, makro, devisen, live, today):
 
     mk = {m["id"]: m for m in makro}
     macro_bits = []
-    if "VIXCLS" in mk:
-        v = mk["VIXCLS"]
+    if "VIX" in mk:
+        v = mk["VIX"]
         level = ("sehr ruhig" if v["value"] < 15 else "normal" if v["value"] < 20
                  else "erhöht" if v["value"] < 30 else "hoch – der Markt ist nervös")
         macro_bits.append(f"Der VIX schloss am {day_label(v['date'])} bei {num(v['value'])} – die erwartete Schwankung ist {level}.")
-    if "DGS10" in mk:
-        y = mk["DGS10"]
+    if "UST10" in mk:
+        y = mk["UST10"]
         macro_bits.append(f"Die 10-jährige US-Rendite lag zuletzt bei {num(y['value'])} % "
                           f"({signed((y['value'] - y['prev']) * 100, 0, ' Bp.')}).")
     eur = next((d for d in devisen if d["pair"] == "EUR/USD"), None)
@@ -305,21 +370,22 @@ def run(args):
             groups[g].append(row(sym, name, closes, sym_live, source, g != "sektoren"))
 
     makro = []
-    fred_start = (date.today() - timedelta(days=760)).isoformat()  # zwei Jahre fuer die Inflationsrate
-    for sid, (name, unit) in cfg["fred"].items():
-        try:
-            entry = macro_entry(sid, name, unit, fred_series(sid, fred_start))
-            if entry:
-                makro.append(entry)
-        except Exception as e:
-            log.warning(f"FRED {sid}: {e}")
+    raw = makro_rows((date.today() - timedelta(days=760)).isoformat())  # zwei Jahre fuer die Inflationsrate
+    for sid, (name, unit) in cfg["makro"].items():
+        entry = macro_entry(sid, name, unit, raw[sid]) if sid in raw else None
+        if entry:
+            makro.append(entry)
 
-    rates, fx_source = ecb_rates(cfg["devisen"], start)
+    try:
+        rates = ecb_rates(cfg["devisen"], start)
+    except Exception as e:
+        log.warning(f"EZB-Kurse nicht abrufbar: {e}")
+        rates = {}
     devisen = []
     for pair, rows in rates.items():
         if len(rows) >= 2:
             devisen.append({"pair": pair, "value": rows[-1][1], "d1": pct(rows[-1][1], rows[-2][1]),
-                            "date": rows[-1][0], "source": fx_source,
+                            "date": rows[-1][0], "source": "EZB",
                             "hist": {"from": rows[0][0], "to": rows[-1][0], "c": [round(v, 5) for _, v in rows]}})
     devisen.sort(key=lambda d: cfg["devisen"].index(d["pair"][4:]) if d["pair"][4:] in cfg["devisen"] else 99)
 

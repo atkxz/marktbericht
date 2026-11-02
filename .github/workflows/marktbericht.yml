@@ -1,0 +1,50 @@
+# Erstellt Mo-Fr um 15:45 und 20:00 Uhr (deutsche Zeit) den Marktbericht und legt ihn in docs/ ab.
+# GitHub Pages zeigt docs/ als Webseite an. Von Hand starten: Actions > Marktbericht > Run workflow.
+name: Marktbericht
+
+on:
+  schedule:
+    # GitHub rechnet in UTC und kennt keine Sommerzeit: jeder Termin ist fuer MEZ und MESZ
+    # angelegt, market_report.py --only-at waehlt den passenden Lauf aus.
+    - cron: "45 13,14 * * 1-5"
+    - cron: "0 18,19 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: marktbericht
+  cancel-in-progress: false
+
+jobs:
+  bericht:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Europe/Berlin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bericht erstellen
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            python market_report.py --site docs --only-at 15:45,20:00
+          else
+            python market_report.py --site docs
+          fi
+
+      - name: Bericht speichern
+        run: |
+          git config user.name "Marktbericht-Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          if git diff --cached --quiet; then
+            echo "Kein neuer Bericht."
+          else
+            git commit -m "Marktbericht $(date '+%Y-%m-%d %H:%M')"
+            git push
+          fi

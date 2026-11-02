@@ -1,0 +1,11 @@
+# Positivliste: Auf GitHub landen nur der Marktbericht und seine Webseite.
+# Trading-Bot, .env (Alpaca-Schluessel), Logs und lokale Berichte bleiben auf diesem Rechner.
+*
+!.gitignore
+!market_report.py
+!market_report.json
+!.github/
+!.github/workflows/
+!.github/workflows/marktbericht.yml
+!docs/
+!docs/**

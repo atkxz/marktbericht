@@ -1,0 +1,45 @@
+{
+  "indices": {
+    "^GDAXI": "DAX",
+    "^STOXX50E": "Euro Stoxx 50",
+    "^GSPC": "S&P 500",
+    "^IXIC": "Nasdaq Composite",
+    "^DJI": "Dow Jones",
+    "^N225": "Nikkei 225"
+  },
+  "macro": {
+    "^VIX": "VIX (Volatilität)",
+    "EURUSD=X": "EUR/USD",
+    "^TNX": "US-Rendite 10 J.",
+    "GC=F": "Gold",
+    "BZ=F": "Brent-Öl",
+    "BTC-USD": "Bitcoin"
+  },
+  "sectors": {
+    "XLK": "Technologie",
+    "XLC": "Kommunikation",
+    "XLY": "Zyklischer Konsum",
+    "XLP": "Basiskonsum",
+    "XLF": "Finanzen",
+    "XLV": "Gesundheit",
+    "XLI": "Industrie",
+    "XLE": "Energie",
+    "XLB": "Grundstoffe",
+    "XLU": "Versorger",
+    "XLRE": "Immobilien"
+  },
+  "watchlist": {
+    "AAPL": "Apple",
+    "MSFT": "Microsoft",
+    "NVDA": "Nvidia",
+    "AMZN": "Amazon",
+    "GOOGL": "Alphabet",
+    "META": "Meta",
+    "TSLA": "Tesla",
+    "NBIS": "Nebius",
+    "SAP.DE": "SAP",
+    "SIE.DE": "Siemens"
+  },
+  "news_symbols": ["^GSPC", "^GDAXI", "^IXIC"],
+  "news_count": 8
+}

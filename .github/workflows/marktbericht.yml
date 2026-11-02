@@ -1,11 +1,12 @@
-# Erstellt Mo-Fr um 15:45 und 20:00 Uhr (deutsche Zeit) den Marktbericht und legt ihn in docs/ ab.
-# GitHub Pages zeigt docs/ als Webseite an. Von Hand starten: Actions > Marktbericht > Run workflow.
+# Aktualisiert Mo-Fr um 15:45 und 20:00 Uhr (deutsche Zeit) die Daten der Web-App in docs/data/.
+# GitHub Pages zeigt docs/ als App an. Von Hand starten: Actions > Marktbericht > Run workflow.
+# Benoetigt die Repository-Secrets APCA_API_KEY_ID und APCA_API_SECRET_KEY (Alpaca).
 name: Marktbericht
 
 on:
   schedule:
     # GitHub rechnet in UTC und kennt keine Sommerzeit: jeder Termin ist fuer MEZ und MESZ
-    # angelegt, market_report.py --only-at waehlt den passenden Lauf aus.
+    # angelegt, finanz_app.py --only-at waehlt den passenden Lauf aus.
     - cron: "45 13,14 * * 1-5"
     - cron: "0 18,19 * * 1-5"
   workflow_dispatch:
@@ -22,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TZ: Europe/Berlin
+      APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+      APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,22 +32,22 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Bericht erstellen
+      - name: Daten aktualisieren
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            python market_report.py --site docs --only-at 15:45,20:00
+            python finanz_app.py --only-at 15:45,20:00
           else
-            python market_report.py --site docs
+            python finanz_app.py
           fi
 
-      - name: Bericht speichern
+      - name: Daten speichern
         run: |
           git config user.name "Marktbericht-Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs
+          git add docs/data
           if git diff --cached --quiet; then
-            echo "Kein neuer Bericht."
+            echo "Keine neuen Daten."
           else
-            git commit -m "Marktbericht $(date '+%Y-%m-%d %H:%M')"
+            git commit -m "Marktdaten $(date '+%Y-%m-%d %H:%M')"
             git push
           fi

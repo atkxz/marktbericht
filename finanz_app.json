@@ -1,0 +1,51 @@
+{
+  "maerkte": {
+    "SPY": "S&P 500",
+    "QQQ": "Nasdaq 100",
+    "DIA": "Dow Jones",
+    "EWG": "Deutschland",
+    "FEZ": "Euro Stoxx 50",
+    "EWJ": "Japan"
+  },
+  "sektoren": {
+    "XLK": "Technologie",
+    "XLC": "Kommunikation",
+    "XLY": "Zyklischer Konsum",
+    "XLP": "Basiskonsum",
+    "XLF": "Finanzen",
+    "XLV": "Gesundheit",
+    "XLI": "Industrie",
+    "XLE": "Energie",
+    "XLB": "Grundstoffe",
+    "XLU": "Versorger",
+    "XLRE": "Immobilien"
+  },
+  "watchlist": {
+    "AAPL": "Apple",
+    "MSFT": "Microsoft",
+    "NVDA": "Nvidia",
+    "AMZN": "Amazon",
+    "GOOGL": "Alphabet",
+    "META": "Meta",
+    "TSLA": "Tesla",
+    "NBIS": "Nebius",
+    "SAP": "SAP"
+  },
+  "rohstoffe": {
+    "GLD": "Gold",
+    "USO": "Öl (WTI)",
+    "BTC/USD": "Bitcoin"
+  },
+  "fred": {
+    "SP500": ["S&P 500 Index", "Punkte"],
+    "VIXCLS": ["VIX (Volatilität)", "Punkte"],
+    "DGS10": ["US-Rendite 10 J.", "%"],
+    "DGS2": ["US-Rendite 2 J.", "%"],
+    "FEDFUNDS": ["Leitzins Fed", "%"],
+    "CPIAUCSL": ["US-Inflation", "% ggü. Vorjahr"],
+    "UNRATE": ["US-Arbeitslosenquote", "%"]
+  },
+  "devisen": ["USD", "GBP", "CHF", "JPY"],
+  "news_count": 15,
+  "notenbank_count": 6
+}

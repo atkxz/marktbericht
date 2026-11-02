@@ -4,6 +4,8 @@
 !.gitignore
 !market_report.py
 !market_report.json
+!finanz_app.py
+!finanz_app.json
 !.github/
 !.github/workflows/
 !.github/workflows/marktbericht.yml
